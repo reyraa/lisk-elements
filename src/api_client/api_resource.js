@@ -13,7 +13,7 @@
  *
  */
 
-import * as popsicle from 'popsicle';
+import crossFetch from 'cross-fetch';
 
 const API_RECONNECT_MAX_RETRY_COUNT = 3;
 
@@ -37,20 +37,25 @@ export default class APIResource {
 	}
 
 	request(req, retry, retryCount = 1) {
-		const request = popsicle
-			.request(req)
-			.use(popsicle.plugins.parse(['json', 'urlencoded']))
-			.then(res => {
-				if (res.status >= 300) {
-					if (res.body && res.body.message) {
-						throw new Error(`Status ${res.status} : ${res.body.message}`);
-					}
-					throw new Error(
-						`Status ${res.status} : An unknown error has occurred.`,
-					);
-				}
-				return res.body;
-			});
+		const request = crossFetch
+			.fetch(req.url, {
+				method: req.method,
+				headers: req.headers,
+				body: req.body,
+			})
+			.then(
+				res =>
+					res.status >= 300
+						? res.json().then(body => {
+								if (body && body.message) {
+									throw new Error(`Status ${res.status} : ${body.message}`);
+								}
+								throw new Error(
+									`Status ${res.status} : An unknown error has occurred.`,
+								);
+							})
+						: res.json(),
+			);
 
 		if (retry) {
 			request.catch(err => this.handleRetry(err, req, retryCount));

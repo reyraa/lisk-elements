@@ -12,10 +12,8 @@
  * Removal or modification of this copyright notice is prohibited.
  *
  */
-
+import crossFetch from 'cross-fetch';
 import APIResource from 'api_client/api_resource';
-// Require is used for stubbing
-const popsicle = require('popsicle');
 
 describe('API resource module', () => {
 	const GET = 'GET';
@@ -37,8 +35,8 @@ describe('API resource module', () => {
 	};
 
 	const sendRequestResult = {
-		status: 200,
-		body: { success: true, sendRequest: true },
+		data: [],
+		limit: 0,
 	};
 	let resource;
 	let apiClient;
@@ -87,12 +85,14 @@ describe('API resource module', () => {
 	});
 
 	describe('#request', () => {
-		let popsicleStub;
+		let fetchStub;
+		let fetchJSONStub;
 		let handleRetryStub;
 
 		beforeEach(() => {
-			popsicleStub = sandbox.stub(popsicle, 'request').returns({
-				use: () => Promise.resolve(sendRequestResult),
+			fetchJSONStub = sandbox.stub().resolves(sendRequestResult);
+			fetchStub = sandbox.stub(crossFetch, 'fetch').resolves({
+				json: fetchJSONStub,
 			});
 			handleRetryStub = sandbox.stub(resource, 'handleRetry');
 			return Promise.resolve();
@@ -100,29 +100,31 @@ describe('API resource module', () => {
 
 		it('should make a request to API without calling retry', () => {
 			return resource.request(defaultRequest, false).then(res => {
-				expect(popsicleStub).to.be.calledOnce;
+				expect(fetchStub).to.be.calledOnce;
+				expect(fetchJSONStub).to.be.calledOnce;
 				expect(handleRetryStub).not.to.be.called;
-				return expect(res).to.eql(sendRequestResult.body);
+				return expect(res).to.eql(sendRequestResult);
 			});
 		});
 
 		it('should make a request to API without calling retry when it successes', () => {
 			return resource.request(defaultRequest, true).then(res => {
-				expect(popsicleStub).to.be.calledOnce;
+				expect(fetchStub).to.be.calledOnce;
+				expect(fetchJSONStub).to.be.calledOnce;
 				expect(handleRetryStub).not.to.be.called;
-				return expect(res).to.eql(sendRequestResult.body);
+				return expect(res).to.eql(sendRequestResult);
 			});
 		});
 
 		describe('when response status is greater than 300', () => {
 			it('should reject with "An unknown error has occured." message if there is no message is supplied', () => {
 				const statusCode = 300;
-				popsicleStub.returns({
-					use: () =>
-						Promise.resolve({
-							status: statusCode,
-						}),
+				fetchJSONStub = sandbox.stub().resolves(sendRequestResult);
+				fetchStub.resolves({
+					status: statusCode,
+					json: fetchJSONStub,
 				});
+				expect(fetchJSONStub).not.to.be.called;
 				return resource.request(defaultRequest, true).catch(err => {
 					return expect(err.message).to.equal(
 						`Status ${statusCode} : An unknown error has occurred.`,
@@ -133,15 +135,14 @@ describe('API resource module', () => {
 			it('should reject with error message from server if message is supplied', () => {
 				const serverErrorMessage = 'validation error';
 				const statusCode = 300;
-				popsicleStub.returns({
-					use: () =>
-						Promise.resolve({
-							status: statusCode,
-							body: {
-								message: serverErrorMessage,
-							},
-						}),
+				fetchJSONStub = sandbox
+					.stub()
+					.resolves({ message: serverErrorMessage });
+				fetchStub.resolves({
+					status: statusCode,
+					json: fetchJSONStub,
 				});
+				expect(fetchJSONStub).not.to.be.called;
 				return resource.request(defaultRequest, true).catch(err => {
 					return expect(err.message).to.eql(
 						`Status ${statusCode} : ${serverErrorMessage}`,
@@ -150,14 +151,15 @@ describe('API resource module', () => {
 			});
 
 			it('should make a request to API with calling retry', () => {
-				popsicleStub.returns({
-					use: () =>
-						Promise.resolve({
-							status: 300,
-						}),
+				const statusCode = 300;
+				fetchJSONStub = sandbox.stub().resolves(sendRequestResult);
+				fetchStub.resolves({
+					status: statusCode,
+					json: fetchJSONStub,
 				});
+				expect(fetchJSONStub).not.to.be.called;
 				return resource.request(defaultRequest, true).catch(() => {
-					expect(popsicleStub).to.be.calledOnce;
+					expect(fetchStub).to.be.calledOnce;
 					return expect(handleRetryStub).to.be.calledOnce;
 				});
 			});
