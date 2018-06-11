@@ -54,7 +54,6 @@ tmp
 # Distribution folders
 dist-browser/*.js
 dist-browser/*.json
-dist-node
 
 # Built test files
 browsertest/package.json
